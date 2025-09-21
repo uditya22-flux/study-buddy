@@ -225,6 +225,11 @@ elif st.session_state.page == "pomodoro":
             st.session_state.on_break = False
     back_button()
 
+
+# ----------------------
+# CLI Chatbot (Gemini/GPT)
+# ----------------------
+
 load_dotenv()
 api_key = os.getenv("OPENROUTER_API_KEY")
 if not api_key:
@@ -252,37 +257,6 @@ else:
     except Exception:
         reply = json.dumps(data, indent=2)
     print("Bot reply:\n", reply)
-
-    
-# ----------------------
-# CLI Chatbot (Gemini/GPT)
-# ----------------------
-def run_cli(model="gpt-4o-mini"):
-    messages = [{"role": "system", "content": "You are a helpful, friendly study buddy."}]
-    print(f"🤖 Chatbot ready using {model}. Type 'exit' to quit.\n")
-    while True:
-        try:
-            user_input = input("You: ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nExiting. Goodbye!")
-            break
-        if not user_input:
-            continue
-        if user_input.lower() == "exit":
-            break
-        messages.append({"role": "user", "content": user_input})
-        reply = ask_chatbot(messages, model=model)
-        print("Bot:", reply, "\n")
-        messages.append({"role": "assistant", "content": reply})
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cli", action="store_true", help="Run chatbot in CLI mode")
-    parser.add_argument("--model", default="gpt-4o-mini", help="Choose model: gpt-4o-mini or google/gemini-pro")
-    args = parser.parse_args()
-    if args.cli:
-        run_cli(model=args.model)
-
 
 
 
