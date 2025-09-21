@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 from dotenv import load_dotenv
+import argparse
 
 # ----------------------
 # Setup & Config
@@ -27,63 +28,11 @@ QUIZ_DIR.mkdir(parents=True, exist_ok=True)
 st.set_page_config(page_title="Study Buddy AI", layout="wide")
 
 # ----------------------
-# CSS Styling
-# ----------------------
-st.markdown("""
-    <style>
-     .stApp {
-        background: linear-gradient(135deg, #a2d4f4 0%, #b5e3ff 50%, #dff6ff 100%);
-        background-attachment: fixed;
-        font-family: "Comic Sans MS", cursive, sans-serif;
-        color: #1a3c6e;
-    }
-    div.stButton > button {
-        background-color: #4a90e2;
-        color: white !important;
-        font-size: 18px;
-        font-weight: bold;
-        border-radius: 12px;
-        padding: 10px 18px;
-        box-shadow: 2px 4px 10px rgba(0,0,0,0.15);
-        transition: all 0.18s ease;
-    }
-    div.stButton > button:hover {
-        background-color: #357ab7;
-        transform: scale(1.03);
-    }
-    .cloud {
-        position: absolute;
-        width: 180px;
-        height: 100px;
-        background: #fff;
-        border-radius: 50%;
-        opacity: 0.95;
-        animation: float 60s linear infinite;
-        box-shadow: 8px 10px 30px rgba(0,0,0,0.04);
-    }
-    .cloud:before, .cloud:after {
-        content: '';
-        position: absolute;
-        background: #fff;
-        border-radius: 50%;
-    }
-    .cloud:before { width: 100px; height: 100px; top: -40px; left: 20px; }
-    .cloud:after { width: 120px; height: 120px; top: -50px; right: 15px; }
-    @keyframes float { 0% { left: -250px; } 100% { left: 100%; } }
-    </style>
-
-    <!-- Clouds -->
-    <div class="cloud" style="top:100px;"></div>
-    <div class="cloud" style="top:300px;"></div>
-    <div class="cloud" style="top:500px;"></div>
-""", unsafe_allow_html=True)
-
-# ----------------------
 # Helpers
 # ----------------------
-def ask_chatbot(messages):
-    """Send messages to OpenRouter API."""
-    payload = {"model": "gpt-4o-mini", "messages": messages}
+def ask_chatbot(messages, model="gpt-4o-mini"):
+    """Send messages to OpenRouter API with selected model."""
+    payload = {"model": model, "messages": messages}
     try:
         r = requests.post(URL, headers=HEADERS, json=payload, timeout=20)
         r.raise_for_status()
@@ -120,6 +69,8 @@ if "page" not in st.session_state:
     st.session_state.page = "welcome"
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": "You are a helpful, friendly study buddy."}]
+if "chat_model" not in st.session_state:
+    st.session_state.chat_model = "gpt-4o-mini"  # default
 if "timer_running" not in st.session_state:
     st.session_state.timer_running = False
 if "work_time" not in st.session_state:
@@ -148,7 +99,7 @@ if st.session_state.page == "welcome":
     st.write("- 📚 Flashcards (save by subject/topic)")
     st.write("- 🧠 Quiz mode (save by subject/topic)")
     st.write("- ⏳ Pomodoro timer")
-    st.write("- 🤖 Chatbot with memory")
+    st.write("- 🤖 Chatbot with GPT or Gemini")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.button("📚 Flashcards", on_click=go_to, args=("flashcards",))
@@ -165,7 +116,8 @@ elif st.session_state.page == "flashcards":
     topic = st.text_input("Enter Topic:")
     if st.button("Generate Flashcards"):
         if subject and topic:
-            resp = ask_chatbot([{"role": "user", "content": f"Make 5 flashcards about {topic}"}])
+            resp = ask_chatbot([{"role": "user", "content": f"Make 5 flashcards about {topic}"}],
+                               model=st.session_state.chat_model)
             st.markdown(resp)
             save_to_file(FLASHCARD_DIR, subject, topic, resp)
             st.success(f"✅ Saved under {subject}/{topic}")
@@ -194,7 +146,8 @@ elif st.session_state.page == "quiz":
     text = st.text_area("Paste study material:")
     if st.button("Generate Quiz"):
         if subject and topic and text:
-            resp = ask_chatbot([{"role": "user", "content": f"Make a quiz with answers from this: {text}"}])
+            resp = ask_chatbot([{"role": "user", "content": f"Make a quiz with answers from this: {text}"}],
+                               model=st.session_state.chat_model)
             st.markdown(resp)
             save_to_file(QUIZ_DIR, subject, topic, resp)
             st.success(f"✅ Saved under {subject}/{topic}")
@@ -218,19 +171,29 @@ elif st.session_state.page == "quiz":
 # ----------------------
 elif st.session_state.page == "chatbot":
     st.header("🤖 Study Buddy Chatbot")
+
+    # Model selector (GPT or Gemini)
+    st.session_state.chat_model = st.selectbox(
+        "Choose AI model:",
+        ["gpt-4o-mini", "google/gemini-pro"],
+        index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
+    )
+
     # Display history
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             with st.chat_message("user"): st.write(msg["content"])
         elif msg["role"] == "assistant":
             with st.chat_message("assistant"): st.write(msg["content"])
+
     # User input
     if user_input := st.chat_input("Type your message..."):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"): st.write(user_input)
-        reply = ask_chatbot(st.session_state.messages)
+        reply = ask_chatbot(st.session_state.messages, model=st.session_state.chat_model)
         st.session_state.messages.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"): st.write(reply)
+
     back_button()
 
 # ----------------------
@@ -261,6 +224,35 @@ elif st.session_state.page == "pomodoro":
             st.session_state.start_time = None
             st.session_state.on_break = False
     back_button()
+
+# ----------------------
+# CLI Chatbot (Gemini/GPT)
+# ----------------------
+def run_cli(model="gpt-4o-mini"):
+    messages = [{"role": "system", "content": "You are a helpful, friendly study buddy."}]
+    print(f"🤖 Chatbot ready using {model}. Type 'exit' to quit.\n")
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nExiting. Goodbye!")
+            break
+        if not user_input:
+            continue
+        if user_input.lower() == "exit":
+            break
+        messages.append({"role": "user", "content": user_input})
+        reply = ask_chatbot(messages, model=model)
+        print("Bot:", reply, "\n")
+        messages.append({"role": "assistant", "content": reply})
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cli", action="store_true", help="Run chatbot in CLI mode")
+    parser.add_argument("--model", default="gpt-4o-mini", help="Choose model: gpt-4o-mini or google/gemini-pro")
+    args = parser.parse_args()
+    if args.cli:
+        run_cli(model=args.model)
 
 
 
