@@ -4,20 +4,24 @@ import requests
 import os
 import time
 from pathlib import Path
-from dotenv import load_dotenv
 import json
 
 # ----------------------
 # Setup & Config
 # ----------------------
-load_dotenv()
-API_KEY = os.getenv("OPENROUTER_API_KEY")
+if "OPENROUTER_API_KEY" in st.secrets:   # for Streamlit Cloud
+    API_KEY = st.secrets["OPENROUTER_API_KEY"]
+else:                                    # for local development
+    from dotenv import load_dotenv
+    load_dotenv()
+    API_KEY = os.getenv("OPENROUTER_API_KEY")
+
 if not API_KEY:
-    st.error("❌ OPENROUTER_API_KEY missing in .env file.")
+    st.error("❌ OPENROUTER_API_KEY missing in .env file or Streamlit Secrets.")
     st.stop()
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
-HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+HEADERS = {"Authorization": f"Bearer " + API_KEY, "Content-Type": "application/json"}
 
 # Storage folders
 FLASHCARD_DIR = Path("storage/flashcards")
@@ -37,8 +41,10 @@ def ask_chatbot(messages, model="gpt-4o-mini"):
         r = requests.post(URL, headers=HEADERS, json=payload, timeout=30)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
+    except requests.exceptions.RequestException as e:
+        return f"⚠️ API Error: {str(e)}"
     except Exception as e:
-        return f"⚠️ API Error: {e}"
+        return f"⚠️ Unexpected Error: {str(e)}"
 
 def save_to_file(base_dir, subject, topic, content):
     subject_dir = base_dir / subject
@@ -244,9 +250,3 @@ elif st.session_state.page == "pomodoro":
             st.session_state.start_time = None
             st.session_state.on_break = False
     back_button()
-
-
-
-
-
-
