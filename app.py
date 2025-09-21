@@ -5,7 +5,7 @@ import os
 import time
 from pathlib import Path
 from dotenv import load_dotenv
-import argparse
+import json
 
 # ----------------------
 # Setup & Config
@@ -34,7 +34,7 @@ def ask_chatbot(messages, model="gpt-4o-mini"):
     """Send messages to OpenRouter API with selected model."""
     payload = {"model": model, "messages": messages}
     try:
-        r = requests.post(URL, headers=HEADERS, json=payload, timeout=20)
+        r = requests.post(URL, headers=HEADERS, json=payload, timeout=30)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
@@ -96,8 +96,8 @@ if st.session_state.page == "welcome":
     st.subheader("Your all-in-one study companion!")
 
     st.write("✨ Features:")
-    st.write("- 📚 Flashcards (save by subject/topic)")
-    st.write("- 🧠 Quiz mode (save by subject/topic)")
+    st.write("- 📚 Flashcards (AI-generated, saved by subject/topic)")
+    st.write("- 🧠 Quiz mode (AI-generated, saved by subject/topic)")
     st.write("- ⏳ Pomodoro timer")
     st.write("- 🤖 Chatbot with GPT or Gemini")
 
@@ -112,17 +112,28 @@ if st.session_state.page == "welcome":
 # ----------------------
 elif st.session_state.page == "flashcards":
     st.header("📚 Flashcards")
+
+    # Model selector
+    st.session_state.chat_model = st.selectbox(
+        "Choose AI model:",
+        ["gpt-4o-mini", "google/gemini-pro"],
+        index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
+    )
+
     subject = st.text_input("Enter Subject:")
     topic = st.text_input("Enter Topic:")
     if st.button("Generate Flashcards"):
         if subject and topic:
-            resp = ask_chatbot([{"role": "user", "content": f"Make 5 flashcards about {topic}"}],
-                               model=st.session_state.chat_model)
+            resp = ask_chatbot(
+                [{"role": "user", "content": f"Make 5 flashcards about {topic}"}],
+                model=st.session_state.chat_model
+            )
             st.markdown(resp)
             save_to_file(FLASHCARD_DIR, subject, topic, resp)
             st.success(f"✅ Saved under {subject}/{topic}")
         else:
             st.warning("⚠️ Enter subject and topic.")
+
     st.subheader("📂 Your Saved Flashcards")
     subjects = list_subjects(FLASHCARD_DIR)
     if subjects:
@@ -141,18 +152,29 @@ elif st.session_state.page == "flashcards":
 # ----------------------
 elif st.session_state.page == "quiz":
     st.header("🧠 Quiz Mode")
+
+    # Model selector
+    st.session_state.chat_model = st.selectbox(
+        "Choose AI model:",
+        ["gpt-4o-mini", "google/gemini-pro"],
+        index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
+    )
+
     subject = st.text_input("Enter Subject (Quiz):")
     topic = st.text_input("Enter Topic (Quiz):")
     text = st.text_area("Paste study material:")
     if st.button("Generate Quiz"):
         if subject and topic and text:
-            resp = ask_chatbot([{"role": "user", "content": f"Make a quiz with answers from this: {text}"}],
-                               model=st.session_state.chat_model)
+            resp = ask_chatbot(
+                [{"role": "user", "content": f"Make a quiz with answers from this: {text}"}],
+                model=st.session_state.chat_model
+            )
             st.markdown(resp)
             save_to_file(QUIZ_DIR, subject, topic, resp)
             st.success(f"✅ Saved under {subject}/{topic}")
         else:
             st.warning("⚠️ Enter subject, topic, and material.")
+
     st.subheader("📂 Your Saved Quizzes")
     subjects = list_subjects(QUIZ_DIR)
     if subjects:
@@ -172,21 +194,19 @@ elif st.session_state.page == "quiz":
 elif st.session_state.page == "chatbot":
     st.header("🤖 Study Buddy Chatbot")
 
-    # Model selector (GPT or Gemini)
+    # Model selector
     st.session_state.chat_model = st.selectbox(
         "Choose AI model:",
         ["gpt-4o-mini", "google/gemini-pro"],
         index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
     )
 
-    # Display history
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             with st.chat_message("user"): st.write(msg["content"])
         elif msg["role"] == "assistant":
             with st.chat_message("assistant"): st.write(msg["content"])
 
-    # User input
     if user_input := st.chat_input("Type your message..."):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"): st.write(user_input)
@@ -224,39 +244,6 @@ elif st.session_state.page == "pomodoro":
             st.session_state.start_time = None
             st.session_state.on_break = False
     back_button()
-
-
-# ----------------------
-# CLI Chatbot (Gemini/GPT)
-# ----------------------
-
-load_dotenv()
-api_key = os.getenv("OPENROUTER_API_KEY")
-if not api_key:
-    print("API key not found. Check that .env exists and has OPENROUTER_API_KEY.")
-    raise SystemExit(1)
-
-url = "https://api.openrouter.ai/v1/chat/completions"
-headers = {
-    "Authorization": f"Bearer {api_key}",
-    "Content-Type": "application/json"
-}
-payload = {
-    "model": "gpt-4o-mini",        # change if your account uses a different model
-    "messages": [{"role": "user", "content": "Hello chatbot"}]
-}
-
-resp = requests.post(url, headers=headers, json=payload)
-if resp.status_code != 200:
-    print("Request failed:", resp.status_code, resp.text)
-else:
-    data = resp.json()
-    # Attempt to extract the reply safely
-    try:
-        reply = data["choices"][0]["message"]["content"]
-    except Exception:
-        reply = json.dumps(data, indent=2)
-    print("Bot reply:\n", reply)
 
 
 
