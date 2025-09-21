@@ -323,23 +323,31 @@ elif st.session_state.page == "quiz":
     back_button()
 
 # --- Chatbot Page ---
-elif st.session_state.page == "chatbot":
-    st.header("🤖 Chatbot")
-    user_input = st.text_input("Ask me anything:")
-    if st.button("Send"):
-        if user_input and api_key:
-            url = "https://openrouter.ai/api/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            data = {"model": "gpt-4o-mini",
-                    "messages": [{"role": "user", "content": user_input}]}
-            resp = requests.post(url, headers=headers, json=data)
-            if resp.status_code == 200:
-                st.write(resp.json()["choices"][0]["message"]["content"])
-            else:
-                st.error("❌ Failed to get chatbot response.")
-        else:
-            st.warning("⚠️ Enter text and check API key.")
-    back_button()
+# Load API key
+load_dotenv()
+api_key = os.getenv("OPENROUTER_API_KEY")
+url = "https://openrouter.ai/api/v1/chat/completions"
+
+def ask_chatbot(messages):
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    data = {"model": "gpt-4o-mini", "messages": messages}
+    resp = requests.post(url, headers=headers, json=data).json()
+    return resp["choices"][0]["message"]["content"]
+
+# Conversation memory
+messages = [{"role": "system", "content": "You are a friendly study buddy chatbot."}]
+
+print("🤖 Chatbot ready! Type 'exit' to quit.\n")
+
+while True:
+    user_input = input("You: ")
+    if user_input.lower() == "exit":
+        break
+
+    messages.append({"role": "user", "content": user_input})
+    reply = ask_chatbot(messages)
+    print("Bot:", reply)
+    messages.append({"role": "assistant", "content": reply})
 
 
 
