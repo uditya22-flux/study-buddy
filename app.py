@@ -1,253 +1,54 @@
-# app.py
 import streamlit as st
-import requests
-import os
-import time
-from pathlib import Path
-import json
+from dotenv import load_dotenv
+import os, requests
 
-# ----------------------
-# Setup & Config
-# ----------------------
-if "OPENROUTER_API_KEY" in st.secrets:   # for Streamlit Cloud
-    API_KEY = st.secrets["OPENROUTER_API_KEY"]
-else:                                    # for local development
-    from dotenv import load_dotenv
-    load_dotenv()
-    API_KEY = os.getenv("OPENROUTER_API_KEY")
+# Load API key
+load_dotenv()
+api_key = os.getenv("OPENROUTER_API_KEY")
 
-if not API_KEY:
-    st.error("❌ OPENROUTER_API_KEY missing in .env file or Streamlit Secrets.")
+if not api_key:
+    st.error("❌ API key not found. Did you create a .env file?")
     st.stop()
 
-  URL = "https://openrouter.ai/api/v1/chat/completions"
+url = "https://openrouter.ai/api/v1/chat/completions"
+headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-HEADERS = {"Authorization": f"Bearer " + API_KEY, "Content-Type": "application/json"}
-
-# Storage folders
-FLASHCARD_DIR = Path("storage/flashcards")
-QUIZ_DIR = Path("storage/quizzes")
-FLASHCARD_DIR.mkdir(parents=True, exist_ok=True)
-QUIZ_DIR.mkdir(parents=True, exist_ok=True)
-
-st.set_page_config(page_title="Study Buddy AI", layout="wide")
-
-# ----------------------
-# Helpers
-# ----------------------
-def ask_chatbot(messages, model="gpt-4o-mini"):
-    """Send messages to OpenRouter API with selected model."""
-    payload = {"model": model, "messages": messages}
-    try:
-        r = requests.post(URL, headers=HEADERS, json=payload, timeout=30)
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
-    except requests.exceptions.RequestException as e:
-        return f"⚠️ API Error: {str(e)}"
-    except Exception as e:
-        return f"⚠️ Unexpected Error: {str(e)}"
-
-def save_to_file(base_dir, subject, topic, content):
-    subject_dir = base_dir / subject
-    subject_dir.mkdir(parents=True, exist_ok=True)
-    file_path = subject_dir / f"{topic}.md"
-    file_path.write_text(content, encoding="utf-8")
-    return file_path
-
-def list_subjects(base_dir):
-    return [d.name for d in base_dir.iterdir() if d.is_dir()]
-
-def list_topics(base_dir, subject):
-    subject_dir = base_dir / subject
-    return [f.stem for f in subject_dir.glob("*.md")] if subject_dir.exists() else []
-
-def read_content(base_dir, subject, topic):
-    file_path = base_dir / subject / f"{topic}.md"
-    return file_path.read_text(encoding="utf-8") if file_path.exists() else "❌ No saved content."
-
-def format_mmss(seconds):
-    m, s = divmod(max(0, int(seconds)), 60)
-    return f"{m:02d}:{s:02d}"
-
-# ----------------------
-# Session State
-# ----------------------
-if "page" not in st.session_state:
-    st.session_state.page = "welcome"
+# Session state to store chat history
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "You are a helpful, friendly study buddy."}]
-if "chat_model" not in st.session_state:
-    st.session_state.chat_model = "gpt-4o-mini"  # default
-if "timer_running" not in st.session_state:
-    st.session_state.timer_running = False
-if "work_time" not in st.session_state:
-    st.session_state.work_time = 25
-if "break_time" not in st.session_state:
-    st.session_state.break_time = 5
-if "start_time" not in st.session_state:
-    st.session_state.start_time = None
-if "on_break" not in st.session_state:
-    st.session_state.on_break = False
+    st.session_state.messages = [
+        {"role": "system", "content": "You are a helpful study buddy. Explain clearly and give examples."}
+    ]
 
-# ----------------------
-# Navigation
-# ----------------------
-def go_to(page): st.session_state.page = page
-def back_button(): st.button("⬅️ Back to Home", on_click=go_to, args=("welcome",))
+st.title("📚 Study Buddy Chatbot 🤖")
 
-# ----------------------
-# Welcome Page
-# ----------------------
-if st.session_state.page == "welcome":
-    st.title("🐰 Study Buddy AI 🌸")
-    st.subheader("Your all-in-one study companion!")
+# Display past messages in chat bubbles
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        st.markdown(f"<div style='background:#DCF8C6; padding:8px; border-radius:10px; margin:5px 0;'><b>You:</b> {msg['content']}</div>", unsafe_allow_html=True)
+    elif msg["role"] == "assistant":
+        st.markdown(f"<div style='background:#ECECEC; padding:8px; border-radius:10px; margin:5px 0;'><b>Bot:</b> {msg['content']}</div>", unsafe_allow_html=True)
 
-    st.write("✨ Features:")
-    st.write("- 📚 Flashcards (AI-generated, saved by subject/topic)")
-    st.write("- 🧠 Quiz mode (AI-generated, saved by subject/topic)")
-    st.write("- ⏳ Pomodoro timer")
-    st.write("- 🤖 Chatbot with GPT or Gemini")
+# Input box for new message
+user_input = st.text_input("Type your message:")
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: st.button("📚 Flashcards", on_click=go_to, args=("flashcards",))
-    with c2: st.button("🧠 Quiz", on_click=go_to, args=("quiz",))
-    with c3: st.button("🤖 Chatbot", on_click=go_to, args=("chatbot",))
-    with c4: st.button("⏳ Pomodoro", on_click=go_to, args=("pomodoro",))
+if st.button("Send") and user_input:
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": user_input})
 
-# ----------------------
-# Flashcards Page
-# ----------------------
-elif st.session_state.page == "flashcards":
-    st.header("📚 Flashcards")
+    # Send request to API
+    data = {"model": "gpt-4o-mini", "messages": st.session_state.messages}
+    resp = requests.post(url, headers=headers, json=data)
+    reply = resp.json()["choices"][0]["message"]["content"]
 
-    # Model selector
-    st.session_state.chat_model = st.selectbox(
-        "Choose AI model:",
-        ["gpt-4o-mini", "google/gemini-pro"],
-        index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
-    )
+    # Add assistant reply
+    st.session_state.messages.append({"role": "assistant", "content": reply})
 
-    subject = st.text_input("Enter Subject:")
-    topic = st.text_input("Enter Topic:")
-    if st.button("Generate Flashcards"):
-        if subject and topic:
-            resp = ask_chatbot(
-                [{"role": "user", "content": f"Make 5 flashcards about {topic}"}],
-                model=st.session_state.chat_model
-            )
-            st.markdown(resp)
-            save_to_file(FLASHCARD_DIR, subject, topic, resp)
-            st.success(f"✅ Saved under {subject}/{topic}")
-        else:
-            st.warning("⚠️ Enter subject and topic.")
+    st.rerun()
 
-    st.subheader("📂 Your Saved Flashcards")
-    subjects = list_subjects(FLASHCARD_DIR)
-    if subjects:
-        sel_subject = st.selectbox("Choose Subject", subjects)
-        topics = list_topics(FLASHCARD_DIR, sel_subject)
-        if topics:
-            sel_topic = st.selectbox("Choose Topic", topics)
-            if st.button("📖 View Flashcards"):
-                st.markdown(read_content(FLASHCARD_DIR, sel_subject, sel_topic))
-    else:
-        st.info("No flashcards yet.")
-    back_button()
+# Save chat history button
+if st.button("💾 Save Chat"):
+    with open("chat_history.txt", "w", encoding="utf-8") as f:
+        for msg in st.session_state.messages:
+            f.write(f"{msg['role']}: {msg['content']}\n")
+    st.success("Chat saved to chat_history.txt ✅")
 
-# ----------------------
-# Quiz Page
-# ----------------------
-elif st.session_state.page == "quiz":
-    st.header("🧠 Quiz Mode")
-
-    # Model selector
-    st.session_state.chat_model = st.selectbox(
-        "Choose AI model:",
-        ["gpt-4o-mini", "google/gemini-pro"],
-        index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
-    )
-
-    subject = st.text_input("Enter Subject (Quiz):")
-    topic = st.text_input("Enter Topic (Quiz):")
-    text = st.text_area("Paste study material:")
-    if st.button("Generate Quiz"):
-        if subject and topic and text:
-            resp = ask_chatbot(
-                [{"role": "user", "content": f"Make a quiz with answers from this: {text}"}],
-                model=st.session_state.chat_model
-            )
-            st.markdown(resp)
-            save_to_file(QUIZ_DIR, subject, topic, resp)
-            st.success(f"✅ Saved under {subject}/{topic}")
-        else:
-            st.warning("⚠️ Enter subject, topic, and material.")
-
-    st.subheader("📂 Your Saved Quizzes")
-    subjects = list_subjects(QUIZ_DIR)
-    if subjects:
-        sel_subject = st.selectbox("Choose Subject", subjects)
-        topics = list_topics(QUIZ_DIR, sel_subject)
-        if topics:
-            sel_topic = st.selectbox("Choose Topic", topics)
-            if st.button("📖 View Quiz"):
-                st.markdown(read_content(QUIZ_DIR, sel_subject, sel_topic))
-    else:
-        st.info("No quizzes yet.")
-    back_button()
-
-# ----------------------
-# Chatbot Page
-# ----------------------
-elif st.session_state.page == "chatbot":
-    st.header("🤖 Study Buddy Chatbot")
-
-    # Model selector
-    st.session_state.chat_model = st.selectbox(
-        "Choose AI model:",
-        ["gpt-4o-mini", "google/gemini-pro"],
-        index=0 if st.session_state.chat_model == "gpt-4o-mini" else 1
-    )
-
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            with st.chat_message("user"): st.write(msg["content"])
-        elif msg["role"] == "assistant":
-            with st.chat_message("assistant"): st.write(msg["content"])
-
-    if user_input := st.chat_input("Type your message..."):
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"): st.write(user_input)
-        reply = ask_chatbot(st.session_state.messages, model=st.session_state.chat_model)
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        with st.chat_message("assistant"): st.write(reply)
-
-    back_button()
-
-# ----------------------
-# Pomodoro Page
-# ----------------------
-elif st.session_state.page == "pomodoro":
-    st.header("⏳ Pomodoro Timer")
-    st.number_input("Work (min)", 1, 180, value=st.session_state.work_time, key="work_time")
-    st.number_input("Break (min)", 1, 60, value=st.session_state.break_time, key="break_time")
-
-    if not st.session_state.timer_running:
-        if st.button("▶️ Start"):
-            st.session_state.start_time = time.time()
-            st.session_state.timer_running = True
-            st.session_state.on_break = False
-    else:
-        elapsed = int(time.time() - st.session_state.start_time)
-        total = (st.session_state.break_time if st.session_state.on_break else st.session_state.work_time) * 60
-        remaining = total - elapsed
-        if remaining <= 0:
-            st.session_state.on_break = not st.session_state.on_break
-            st.session_state.start_time = time.time()
-            remaining = (st.session_state.break_time if st.session_state.on_break else st.session_state.work_time) * 60
-            st.balloons()
-        st.write("⏰", "Break" if st.session_state.on_break else "Work", format_mmss(remaining))
-        if st.button("🛑 Stop"):
-            st.session_state.timer_running = False
-            st.session_state.start_time = None
-            st.session_state.on_break = False
-    back_button()
