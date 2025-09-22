@@ -20,7 +20,8 @@ if not API_KEY:
     st.error("❌ OPENROUTER_API_KEY missing in .env file or Streamlit Secrets.")
     st.stop()
 
-URL =  "https://api.openrouter.ai/v1/chat/completions"
+  URL = "https://openrouter.ai/api/v1/chat/completions"
+
 HEADERS = {"Authorization": f"Bearer " + API_KEY, "Content-Type": "application/json"}
 
 # Storage folders

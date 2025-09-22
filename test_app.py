@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 api_key = os.getenv("OPENROUTER_API_KEY")
 
-url = "https://api.openrouter.ai/v1/chat/completions"
+url = URL = "https://openrouter.ai/api/v1/chat/completions"
+
 headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 data = {
     "model": "gpt-4o-mini",

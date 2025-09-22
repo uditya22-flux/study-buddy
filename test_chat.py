@@ -10,7 +10,8 @@ if not api_key:
     print("OPENROUTER_API_KEY=your_api_key_here")
     exit()
 
-url = "https://openrouter.ai/api/v1/chat/completions"
+ URL = "https://openrouter.ai/api/v1/chat/completions"
+
 headers = {
     "Authorization": f"Bearer {api_key}",
     "Content-Type": "application/json"
