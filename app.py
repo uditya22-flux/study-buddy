@@ -10,7 +10,7 @@ if not api_key:
     st.error("❌ API key not found. Did you create a .env file?")
     st.stop()
 
-url = "https://openrouter.ai/api/v1/chat/completions"
+url = "https://api.openrouter.ai/v1/chat/completions"
 headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
 # Session state to store chat history
